@@ -1,7 +1,13 @@
+from datetime import datetime
+
 import httpx
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.exceptions.weather import (
+    CityNotFoundError,
+    WeatherServiceError,
+)
 from app.models.weather import WeatherRecord
 
 
@@ -16,27 +22,32 @@ async def get_city_coordinates(city: str):
         "appid": settings.openweather_api_key,
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            GEOCODING_URL,
-            params=params,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                GEOCODING_URL,
+                params=params,
+            )
 
-    response.raise_for_status()
+        response.raise_for_status()
+
+    except httpx.HTTPError as error:
+        raise WeatherServiceError(
+            "Erro ao consultar o serviço de geocoding."
+        ) from error
 
     data = response.json()
 
     if not data:
-        return None
+        raise CityNotFoundError(
+            f"Cidade '{city}' não encontrada."
+        )
 
     return data[0]
 
 
 async def get_weather(city: str, db: Session):
     location = await get_city_coordinates(city)
-
-    if location is None:
-        return None
 
     params = {
         "lat": location["lat"],
@@ -46,13 +57,19 @@ async def get_weather(city: str, db: Session):
         "lang": "pt_br",
     }
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get(
-            WEATHER_URL,
-            params=params,
-        )
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                WEATHER_URL,
+                params=params,
+            )
 
-    response.raise_for_status()
+        response.raise_for_status()
+
+    except httpx.HTTPError as error:
+        raise WeatherServiceError(
+            "Erro ao consultar o serviço de clima."
+        ) from error
 
     data = response.json()
 
@@ -68,7 +85,7 @@ async def get_weather(city: str, db: Session):
         weather=data["weather"][0]["main"],
         description=data["weather"][0]["description"],
         wind_speed=data["wind"]["speed"],
-        recorded_at=__import__("datetime").datetime.now(),
+        recorded_at=datetime.now(),
     )
 
     db.add(weather_record)
