@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Query, Path
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
@@ -11,6 +11,7 @@ from app.services.weather_service import get_weather
 from app.schemas.weather import WeatherResponse
 from app.models.weather import WeatherRecord
 
+from app.exceptions.weather import CityNotFoundError, WeatherServiceError
 
 
 init_database()
@@ -47,26 +48,24 @@ def health_check():
     response_model=WeatherResponse,
 )
 async def weather(
-    city: str,
+    city: str = Path(
+        min_length=2,
+        max_length=100,
+    ),
     db: Session = Depends(get_db),
 ):
     try:
-        result = await get_weather(city, db)
+        return await get_weather(city, db)
 
-        if result is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Cidade não encontrada.",
-            )
-
-        return result
-
-    except HTTPException:
-        raise
-
-    except Exception as error:
+    except CityNotFoundError as error:
         raise HTTPException(
-            status_code=500,
+            status_code=404,
+            detail=str(error),
+        )
+
+    except WeatherServiceError as error:
+        raise HTTPException(
+            status_code=503,
             detail=str(error),
         )
         
@@ -77,7 +76,11 @@ async def weather(
 )
 def weather_history(
     city: Optional[str] = None,
-    limit: int = 10,
+    limit: int = Query(
+        default=10,
+        ge=1,
+        le=100,
+    ),
     db: Session = Depends(get_db),
 ):
     query = select(WeatherRecord)
