@@ -1,6 +1,7 @@
+from contextlib import asynccontextmanager
 from typing import Optional
 
-from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from fastapi import Depends, FastAPI, HTTPException, Path, Query, status
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -15,27 +16,29 @@ from app.schemas.weather import WeatherResponse
 from app.services.weather_service import get_weather
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init_database()
+    yield
+
+
 app = FastAPI(
     title="Weather API",
     description="API para consulta e armazenamento de dados climáticos.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
 
-init_database()
-
-
-@app.get("/health")
+@app.get("/health", tags=["Health"])
 def health_check():
     try:
         with engine.connect() as connection:
             connection.execute(text("SELECT 1"))
-
         return {
             "status": "healthy",
             "database": "connected",
         }
-
     except Exception:
         raise HTTPException(
             status_code=503,
@@ -46,26 +49,30 @@ def health_check():
         )
 
 
+@app.post(
+    "/api/v1/weather/{city}",
+    response_model=WeatherResponse,
+    status_code=status.HTTP_201_CREATED,
+    tags=["Weather"],
+    summary="Extrai dados do OpenWeather e persiste no banco de dados",
+)
 @app.get(
     "/api/v1/weather/{city}",
     response_model=WeatherResponse,
+    tags=["Weather"],
+    include_in_schema=False,
 )
-async def fetch_weather(
-    city: str = Path(
-        min_length=2,
-        max_length=100,
-    ),
+async def fetch_and_store_weather(
+    city: str = Path(min_length=2, max_length=100),
     db: Session = Depends(get_db),
 ):
     try:
         return await get_weather(city, db)
-
     except CityNotFoundError as error:
         raise HTTPException(
             status_code=404,
             detail=str(error),
         ) from error
-
     except WeatherServiceError as error:
         raise HTTPException(
             status_code=503,
@@ -76,44 +83,35 @@ async def fetch_weather(
 @app.get(
     "/api/v1/weather",
     response_model=list[WeatherResponse],
+    tags=["Weather"],
+    summary="Consulta o histórico de dados climáticos persistidos",
 )
 def weather_history(
     city: Optional[str] = None,
-    limit: int = Query(
-        default=10,
-        ge=1,
-        le=100,
-    ),
+    limit: int = Query(default=10, ge=1, le=100),
     db: Session = Depends(get_db),
 ):
     query = select(WeatherRecord)
 
     if city:
-        query = query.where(
-            WeatherRecord.city.ilike(f"%{city}%")
-        )
+        query = query.where(WeatherRecord.city.ilike(f"%{city}%"))
 
-    query = query.order_by(
-        WeatherRecord.recorded_at.desc()
-    ).limit(limit)
-
+    query = query.order_by(WeatherRecord.recorded_at.desc()).limit(limit)
     result = db.execute(query)
-
     return result.scalars().all()
 
 
 @app.get(
     "/api/v1/weather/id/{weather_id}",
     response_model=WeatherResponse,
+    tags=["Weather"],
+    summary="Consulta um registro específico por ID",
 )
 def get_weather_by_id(
     weather_id: int,
     db: Session = Depends(get_db),
 ):
-    weather_record = db.get(
-        WeatherRecord,
-        weather_id,
-    )
+    weather_record = db.get(WeatherRecord, weather_id)
 
     if weather_record is None:
         raise HTTPException(
