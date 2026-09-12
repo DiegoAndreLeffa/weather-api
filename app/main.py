@@ -1,20 +1,18 @@
-from fastapi import Depends, FastAPI, HTTPException, Query, Path
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-
 from typing import Optional
-from sqlalchemy import select
+
+from fastapi import Depends, FastAPI, HTTPException, Path, Query
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from app.database.connection import engine, get_db
 from app.database.init_db import init_database
-from app.services.weather_service import get_weather
-from app.schemas.weather import WeatherResponse
+from app.exceptions.weather import (
+    CityNotFoundError,
+    WeatherServiceError,
+)
 from app.models.weather import WeatherRecord
-
-from app.exceptions.weather import CityNotFoundError, WeatherServiceError
-
-
-init_database()
+from app.schemas.weather import WeatherResponse
+from app.services.weather_service import get_weather
 
 
 app = FastAPI(
@@ -22,6 +20,9 @@ app = FastAPI(
     description="API para consulta e armazenamento de dados climáticos.",
     version="1.0.0",
 )
+
+
+init_database()
 
 
 @app.get("/health")
@@ -35,19 +36,21 @@ def health_check():
             "database": "connected",
         }
 
-    except Exception as error:
-        return {
-            "status": "unhealthy",
-            "database": "disconnected",
-            "error": str(error),
-        }
-        
-        
+    except Exception:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "status": "unhealthy",
+                "database": "disconnected",
+            },
+        )
+
+
 @app.get(
     "/api/v1/weather/{city}",
     response_model=WeatherResponse,
 )
-async def weather(
+async def fetch_weather(
     city: str = Path(
         min_length=2,
         max_length=100,
@@ -61,15 +64,15 @@ async def weather(
         raise HTTPException(
             status_code=404,
             detail=str(error),
-        )
+        ) from error
 
     except WeatherServiceError as error:
         raise HTTPException(
             status_code=503,
             detail=str(error),
-        )
-        
-        
+        ) from error
+
+
 @app.get(
     "/api/v1/weather",
     response_model=list[WeatherResponse],
@@ -97,6 +100,7 @@ def weather_history(
     result = db.execute(query)
 
     return result.scalars().all()
+
 
 @app.get(
     "/api/v1/weather/id/{weather_id}",
