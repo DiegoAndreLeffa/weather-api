@@ -13,7 +13,7 @@ O projeto foi desenvolvido como parte de uma avaliação técnica, com foco em o
 * **SQLAlchemy** — ORM para comunicação com o banco de dados
 * **PostgreSQL** — banco de dados relacional
 * **Psycopg** — driver PostgreSQL para Python
-* **HTTPX** — comunicação com a API externa
+* **HTTPX** — comunicação assíncrona com a API externa
 * **Pydantic Settings** — gerenciamento de configurações e variáveis de ambiente
 * **Pytest** — testes automatizados
 * **Docker**
@@ -24,18 +24,18 @@ O projeto foi desenvolvido como parte de uma avaliação técnica, com foco em o
 
 * Consulta de cidades através da API de Geocoding do OpenWeather.
 * Consulta das condições climáticas atuais.
-* Transformação dos dados recebidos da API externa.
+* Transformação e enriquecimento dos dados recebidos da API externa.
 * Persistência dos dados no PostgreSQL.
 * Consulta do histórico de dados armazenados.
 * Consulta de um registro específico por ID.
 * Filtro do histórico por cidade.
 * Limite configurável para resultados.
-* Validação dos parâmetros recebidos.
-* Tratamento de erros da API externa.
-* Health check da aplicação e do banco de dados.
-* Documentação interativa através do Swagger.
-* Testes automatizados.
-* Execução completa através de Docker Compose.
+* Validação rigorosa dos parâmetros recebidos.
+* Tratamento de erros e exceções da API externa.
+* Health check da aplicação e da conexão com o banco de dados.
+* Documentação interativa através do Swagger e ReDoc.
+* Testes automatizados com isolamento completo (mocks e SQLite em memória).
+* Execução completa e reprodutível através de Docker Compose.
 
 ## Estrutura do projeto
 
@@ -44,30 +44,39 @@ weather-api/
 │
 ├── app/
 │   ├── core/
+│   │   ├── __init__.py
 │   │   └── config.py
 │   │
 │   ├── database/
+│   │   ├── __init__.py
 │   │   ├── connection.py
 │   │   └── init_db.py
 │   │
 │   ├── exceptions/
+│   │   ├── __init__.py
 │   │   └── weather.py
 │   │
 │   ├── models/
+│   │   ├── __init__.py
 │   │   └── weather.py
 │   │
 │   ├── schemas/
+│   │   ├── __init__.py
 │   │   └── weather.py
 │   │
 │   ├── services/
+│   │   ├── __init__.py
 │   │   └── weather_service.py
 │   │
+│   ├── __init__.py
 │   └── main.py
 │
 ├── tests/
+│   ├── __init__.py
 │   ├── test_weather_api.py
 │   └── test_weather_service.py
 │
+├── .dockerignore
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml
@@ -81,22 +90,20 @@ weather-api/
 Para executar o projeto localmente, é necessário ter instalado:
 
 * Python 3.13 ou superior
-* PostgreSQL
+* PostgreSQL (caso execute fora do Docker)
 * Uma chave de API do OpenWeather
 
 Para executar utilizando Docker:
 
-* Docker Desktop
+* Docker Desktop / Docker Engine com Docker Compose
 
 ## Configuração das variáveis de ambiente
 
-Crie um arquivo `.env` na raiz do projeto.
-
-Utilize o arquivo `.env.example` como referência:
+Crie um arquivo `.env` na raiz do projeto utilizando o arquivo `.env.example` como referência:
 
 ```env
 OPENWEATHER_API_KEY=your_openweather_api_key_here
-DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/weather_db
+DATABASE_URL=postgresql+psycopg://postgres:postgres@localhost:5432/weather_db
 ```
 
 ### Variáveis
@@ -106,80 +113,15 @@ DATABASE_URL=postgresql+psycopg://postgres:your_password@localhost:5432/weather_
 | `OPENWEATHER_API_KEY` | Chave utilizada para autenticação nas APIs do OpenWeather |
 | `DATABASE_URL`        | String de conexão com o PostgreSQL                        |
 
-> O arquivo `.env` não deve ser versionado, pois contém informações de configuração e credenciais.
+> O arquivo `.env` não deve ser versionado no Git, pois contém informações de configuração e credenciais.
 
-## Executando localmente
+## Executando com Docker (Recomendado)
 
-### 1. Clone o repositório
-
-```bash
-git clone https://github.com/DiegoAndreLeffa/weather-api.git
-cd weather-api
-```
-
-### 2. Crie um ambiente virtual
-
-No Windows:
-
-```powershell
-python -m venv .venv
-```
-
-Ative o ambiente:
-
-```powershell
-.venv\Scripts\activate
-```
-
-### 3. Instale as dependências
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure o banco de dados
-
-Crie um banco PostgreSQL chamado:
-
-```text
-weather_db
-```
-
-Depois configure a variável `DATABASE_URL` no arquivo `.env`.
-
-Exemplo:
-
-```env
-DATABASE_URL=postgresql+psycopg://postgres:sua_senha@localhost:5432/weather_db
-```
-
-### 5. Configure a chave do OpenWeather
-
-No arquivo `.env`:
-
-```env
-OPENWEATHER_API_KEY=sua_chave_aqui
-```
-
-### 6. Execute a aplicação
-
-```bash
-fastapi dev app/main.py
-```
-
-A API estará disponível em:
-
-```text
-http://127.0.0.1:8000
-```
-
-## Executando com Docker
-
-O projeto possui um `Dockerfile` para a aplicação e um `docker-compose.yml` responsável por executar a API juntamente com o PostgreSQL.
+O projeto possui um `Dockerfile` e um `docker-compose.yml` responsáveis por orquestrar a API juntamente com o banco PostgreSQL.
 
 ### 1. Configure o `.env`
 
-Na raiz do projeto, crie um arquivo `.env` contendo:
+Na raiz do projeto, crie o arquivo `.env` contendo a sua chave da OpenWeather:
 
 ```env
 OPENWEATHER_API_KEY=sua_chave_aqui
@@ -193,12 +135,11 @@ docker compose up --build
 
 O Docker Compose irá:
 
-1. Criar o container do PostgreSQL.
-2. Criar o banco `weather_db`.
-3. Aguardar o banco estar disponível através do health check.
-4. Criar a imagem da API.
-5. Iniciar a aplicação.
-6. Conectar a API ao PostgreSQL através da rede interna do Docker.
+1. Criar e iniciar o container do PostgreSQL 17.
+2. Criar automaticamente o banco de dados `weather_db`.
+3. Aguardar o banco estar 100% pronto através do `healthcheck`.
+4. Construir a imagem da API e iniciar a aplicação na porta `8000`.
+5. Criar automaticamente as tabelas necessárias no banco através do ciclo de vida (*lifespan*) da aplicação.
 
 A API ficará disponível em:
 
@@ -212,23 +153,68 @@ Para parar os containers:
 docker compose down
 ```
 
-Para parar os containers e remover também os volumes do banco:
+Para parar os containers e remover também os volumes persistidos do banco:
 
 ```bash
 docker compose down -v
 ```
 
-> O comando recomendado para executar o projeto completo em Docker é `docker compose up --build`. O container da API depende das configurações e da rede criadas pelo Docker Compose.
+## Executando localmente (Sem Docker)
+
+### 1. Clone o repositório
+
+```bash
+git clone https://github.com/DiegoAndreLeffa/weather-api.git
+cd weather-api
+```
+
+### 2. Crie e ative um ambiente virtual
+
+No Linux/macOS:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
+No Windows (PowerShell):
+
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+```
+
+### 3. Instale as dependências
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Configure o banco de dados e variáveis
+
+Crie uma base PostgreSQL chamada `weather_db` e configure o arquivo `.env` com as suas credenciais locais e sua chave da API.
+
+### 5. Execute a aplicação
+
+```bash
+fastapi dev app/main.py
+```
+
+A API estará disponível em:
+
+```text
+http://127.0.0.1:8000
+```
 
 ## Documentação da API
 
-Após iniciar a aplicação, a documentação interativa do Swagger pode ser acessada em:
+Após iniciar a aplicação, a documentação interativa com Swagger pode ser acessada em:
 
 ```text
 http://localhost:8000/docs
 ```
 
-Também é possível acessar a documentação alternativa através do ReDoc:
+A documentação alternativa com ReDoc está disponível em:
 
 ```text
 http://localhost:8000/redoc
@@ -238,13 +224,13 @@ http://localhost:8000/redoc
 
 ### Health Check
 
-Verifica se a API está funcionando e se consegue estabelecer conexão com o banco de dados.
+Verifica a saúde da API e a conectividade com o banco de dados.
 
 ```http
 GET /health
 ```
 
-Exemplo de resposta:
+Exemplo de resposta (Status `200 OK`):
 
 ```json
 {
@@ -253,21 +239,27 @@ Exemplo de resposta:
 }
 ```
 
+---
+
 ### Buscar clima e armazenar
 
-Consulta uma cidade no OpenWeather, obtém os dados climáticos atuais, transforma os dados necessários e salva o resultado no PostgreSQL.
+Consulta as coordenadas da cidade informada na API de Geocoding da OpenWeather, obtém os dados meteorológicos atuais, realiza a transformação e persiste o registro no banco de dados.
+
+Seguindo as boas práticas RESTful para criação de recursos, o endpoint principal é um `POST` com retorno `201 Created`:
 
 ```http
-GET /api/v1/weather/{city}
+POST /api/v1/weather/{city}
 ```
+
+> *Nota: Por conveniência para testes rápidos pelo navegador, o endpoint também responde via `GET /api/v1/weather/{city}` com o mesmo comportamento.*
 
 Exemplo:
 
 ```http
-GET /api/v1/weather/Florianopolis
+POST /api/v1/weather/Florianopolis
 ```
 
-Exemplo de resposta:
+Exemplo de resposta (Status `201 Created`):
 
 ```json
 {
@@ -287,24 +279,22 @@ Exemplo de resposta:
 }
 ```
 
-O `id` retornado corresponde ao registro criado no banco de dados.
+---
 
-### Consultar histórico
+### Consultar histórico armazenado
 
-Retorna os registros climáticos armazenados no PostgreSQL.
+Retorna a lista dos registros climáticos persistidos no banco de dados, ordenados dos mais recentes para os mais antigos.
 
 ```http
 GET /api/v1/weather
 ```
 
-É possível utilizar os seguintes parâmetros:
+Parâmetros de consulta (Query Parameters):
 
-| Parâmetro | Tipo    | Obrigatório | Descrição                                 |
-| --------- | ------- | ----------- | ----------------------------------------- |
-| `city`    | string  | Não         | Filtra os registros por cidade            |
-| `limit`   | integer | Não         | Quantidade máxima de registros retornados |
-
-O `limit` possui valor padrão de `10` e aceita valores entre `1` e `100`.
+| Parâmetro | Tipo    | Obrigatório | Padrão | Descrição                                        |
+| --------- | ------- | ----------- | ------ | ------------------------------------------------ |
+| `city`    | string  | Não         | -      | Filtra os registros contendo o nome da cidade    |
+| `limit`   | integer | Não         | `10`   | Quantidade máxima de registros retornados (1-100)|
 
 Exemplo:
 
@@ -312,9 +302,11 @@ Exemplo:
 GET /api/v1/weather?city=Florianopolis&limit=5
 ```
 
+---
+
 ### Consultar registro por ID
 
-Retorna um registro específico armazenado no banco.
+Retorna um registro climático específico armazenado no banco pelo seu identificador primário.
 
 ```http
 GET /api/v1/weather/id/{id}
@@ -326,117 +318,81 @@ Exemplo:
 GET /api/v1/weather/id/1
 ```
 
-Caso o registro não exista, a API retorna:
+Caso o registro não exista, a API retorna Status `404 Not Found`:
 
-```http
-404 Not Found
+```json
+{
+  "detail": "Registro não encontrado."
+}
 ```
 
 ## Fluxo da aplicação
 
-Quando uma cidade é consultada através do endpoint de busca, o fluxo principal é:
+Quando uma extração é solicitada, o fluxo de dados executado é:
 
 ```text
-Cliente
+Cliente / Swagger
    │
    ▼
-FastAPI
+FastAPI Router
    │
    ▼
-Geocoding API
-   │
-   ├── latitude
-   ├── longitude
-   └── informações da cidade
+OpenWeather Geocoding API ──► Obtém latitude, longitude e nome padronizado
    │
    ▼
-Current Weather API
+OpenWeather Current API   ──► Obtém temperatura, umidade, vento, etc.
    │
    ▼
-Transformação dos dados
+Transformação & Modelagem (Pydantic / SQLAlchemy)
    │
    ▼
-PostgreSQL
+Persistência no PostgreSQL
    │
    ▼
-Resposta da API
+Resposta HTTP 201 com o recurso salvo
 ```
-
-A aplicação utiliza o serviço de Geocoding do OpenWeather para obter as coordenadas da cidade e, em seguida, utiliza essas coordenadas para consultar as condições climáticas atuais.
 
 ## Banco de dados
 
-Os dados são armazenados na tabela:
+Os dados são armazenados na tabela `weather_records`:
 
-```text
-weather_records
-```
-
-Principais campos:
-
-| Campo         | Tipo     | Descrição                 |
-| ------------- | -------- | ------------------------- |
-| `id`          | Integer  | Identificador do registro |
-| `city`        | String   | Nome da cidade            |
-| `country`     | String   | Código do país            |
-| `latitude`    | Float    | Latitude                  |
-| `longitude`   | Float    | Longitude                 |
-| `temperature` | Float    | Temperatura atual         |
-| `feels_like`  | Float    | Sensação térmica          |
-| `humidity`    | Integer  | Umidade                   |
-| `pressure`    | Integer  | Pressão atmosférica       |
-| `weather`     | String   | Condição climática        |
-| `description` | String   | Descrição da condição     |
-| `wind_speed`  | Float    | Velocidade do vento       |
-| `recorded_at` | DateTime | Data e hora do registro   |
+| Campo         | Tipo             | Descrição                 |
+| ------------- | ---------------- | ------------------------- |
+| `id`          | Integer (PK, AI) | Identificador do registro |
+| `city`        | String(100)      | Nome da cidade            |
+| `country`     | String(10)       | Código do país            |
+| `latitude`    | Float            | Latitude geográfica       |
+| `longitude`   | Float            | Longitude geográfica      |
+| `temperature` | Float            | Temperatura em °C         |
+| `feels_like`  | Float            | Sensação térmica em °C    |
+| `humidity`    | Integer          | Umidade relativa (%)      |
+| `pressure`    | Integer          | Pressão atmosférica (hPa) |
+| `weather`     | String(50)       | Categoria climática       |
+| `description` | String(100)      | Descrição em português    |
+| `wind_speed`  | Float            | Velocidade do vento (m/s) |
+| `recorded_at` | DateTime         | Momento da persistência   |
 
 ## Testes
 
-Os testes automatizados utilizam `pytest`.
+Os testes automatizados utilizam `pytest` e foram construídos com foco em **total isolamento e reprodutibilidade**:
 
-Para executar:
+* **Sem dependência externa:** Todas as requisições HTTP ao OpenWeather são mockadas, garantindo que os testes rodem rápido e não consumam sua cota de API.
+* **Sem dependência de banco de dados ativo:** Os testes de integração utilizam um banco **SQLite em memória**, permitindo rodar a suíte completa sem precisar ter o PostgreSQL instalado ou em execução.
+
+Para executar todos os testes:
 
 ```bash
 pytest
 ```
 
-Atualmente, o projeto possui **5 testes automatizados**, cobrindo:
+A suíte cobre:
 
-* validação dos parâmetros da API;
-* consulta de coordenadas de uma cidade;
-* tratamento de cidade não encontrada;
-* consulta, transformação e persistência dos dados climáticos;
-* tratamento de registro não encontrado.
-
-As chamadas ao OpenWeather utilizadas nos testes são simuladas através de mocks, evitando dependência do serviço externo durante a execução dos testes.
-
-## Segurança e configuração
-
-A chave da API do OpenWeather é carregada através de variável de ambiente e não fica diretamente no código-fonte.
-
-O arquivo `.env` está incluído no `.gitignore` para evitar o versionamento de credenciais.
-
-O projeto disponibiliza o arquivo `.env.example` contendo apenas a estrutura necessária para configuração.
-
-## Possíveis melhorias futuras
-
-Algumas melhorias que poderiam ser implementadas em uma evolução do projeto:
-
-* adicionar paginação ao histórico;
-* adicionar filtros por intervalo de datas;
-* utilizar migrations com Alembic;
-* adicionar autenticação à API;
-* adicionar cache para reduzir chamadas à API externa;
-* adicionar testes de integração com banco de dados;
-* adicionar CI/CD para execução automática dos testes;
-* adicionar observabilidade e métricas da aplicação.
-
-## Repositório
-
-O código-fonte completo do projeto está disponível no GitHub:
-
-https://github.com/DiegoAndreLeffa/weather-api
+* Validação de parâmetros inválidos da API (Status 422);
+* Tratamento de busca por ID inexistente (Status 404);
+* Sucesso e parsing da consulta de coordenadas (Geocoding);
+* Tratamento de erro para cidades não encontradas na API externa;
+* Fluxo completo de consulta, enriquecimento e persistência no serviço de clima.
 
 ## Licença
 
-Este projeto foi desenvolvido para fins de avaliação técnica e demonstração de conhecimentos em desenvolvimento de APIs, integração com serviços externos, persistência de dados e containerização.
+Projeto desenvolvido para fins de avaliação técnica e demonstração prática de integração de APIs, persistência relacional, containerização com Docker e boas práticas de desenvolvimento em Python.
